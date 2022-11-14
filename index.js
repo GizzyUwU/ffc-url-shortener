@@ -18,6 +18,15 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
 
 app.use('/public', express.static(`${process.cwd()}/public`));
+app.use(function (req, res, next) {
+      console.info(`${req.method} ${req.originalUrl}`) 
+
+    res.on('finish', () => {
+        console.info(`${res.statusCode} ${res.statusMessage}; ${res.get('Content-Length') || 0}b sent`)
+    })
+
+    next()
+})
 
 app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
@@ -27,27 +36,33 @@ app.get('/api/shorturl/:id', async (req, res) => {
   const { id } = req.params;
   let num = isNum(id);
   if(num === false) return res.send({ short_url: "Must be a number."});
-
+console.log(id)
   await shorturl.findOne({ urlid: id }, async (err, urlFound) => {
     if (err) {
       console.log('findOne() error');
     }
+    console.log(urlFound)
     if (!urlFound) {
       res.json({
         error: 'invaild url'
       });
     } else {
-      res.redirect("https://" + urlFound.url);
+      res.redirect(301, "https://" + urlFound.url);
     }
 })
 })
 
 app.post('/api/shorturl', async (req, res) => {
+  try {
   let url = req.body.url
   let find = await shorturl.find({ url: url });
   if (!url) return res.send({ url: 'No Url Provided' });
-  if (find) return res.send({ orignal_url: url, short_url: find.urlid });
-  let workurl = url.replace(/(^\w+:|^)\/\//, '');
+  let protocal = url.replace(/(^\w+:|^)\/\//, '')
+  let workurl = protocal.split('/')[0];
+    console.log(workurl.replace(':', ''))
+    console.log(workurl)
+    console.log(protocal)
+    console.log(url)
   dns.lookup(workurl, async function(err) {
     if (err) {
       res.send({ error: "invalid url" });
@@ -59,7 +74,9 @@ app.post('/api/shorturl', async (req, res) => {
       let pageid = count + 1;
       let newUrl = new shorturl({
         urlid: pageid,
-        url: url,
+        url: workurl,
+        urlpath: protocal,
+        protocal: workurl.replace(':', '')
       })
       newUrl.save();
 
@@ -69,6 +86,9 @@ app.post('/api/shorturl', async (req, res) => {
       })
     }
   })
+  } catch(err) {
+    console.log(err)
+  }
 })
 
 app.listen(port, function() {
