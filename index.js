@@ -1,15 +1,18 @@
 let mongoose = require('mongoose');
 const express = require('express');
-const cors = require('cors');
+const cors = require('cors')
 const app = express();
 const bodyParser = require('body-parser');
-const URL = require("url").URL;
+var dns = require('dns')
 let shorturl = require('./models/shorten');
-      
-mongoose.connect('nono');
+function isNum(str) {
+  return /\d/.test(str)
+}
+
+mongoose.connect('mongodb+srv://freecodecamp:freecodecamp@cluster0.hwsa1vu.mongodb.net/urlshortener', {useUnifiedTopology: true, useFindAndModify: true});
 
 // Basic Configuration
-const port = process.env.PORT || 3000;
+const port = 3000;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
@@ -20,62 +23,53 @@ app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
 });
 
-app.get('/api/shorturl/:id', async (req, res, next) => {
-  try {
-  let param = req.params.id;
-  let find = await shorturl.findOne({ urlid: param });
-  if(!find) return res.redirect('/');
-  res.redirect(find.url);
-  } catch(err) {
-    console.log(err)
-  }
+app.get('/api/shorturl/:id', async (req, res) => {
+  const { id } = req.params;
+  let num = isNum(id);
+  if(num === false) return res.send({ short_url: "Must be a number."});
+
+  await shorturl.findOne({ urlid: id }, async (err, urlFound) => {
+    if (err) {
+      console.log('findOne() error');
+    }
+    if (!urlFound) {
+      res.json({
+        error: 'invaild url'
+      });
+    } else {
+      res.redirect("https://" + urlFound.url);
+    }
+})
 })
 
 app.post('/api/shorturl', async (req, res) => {
-    let urlcheck = []
-    let url = req.body.url;
-    if(!url) return res.send({ url: 'No Url Provided'})
+  let url = req.body.url
+  let find = await shorturl.find({ url: url });
+  if (!url) return res.send({ url: 'No Url Provided' });
+  if (find) return res.send({ orignal_url: url, short_url: find.urlid });
+  let workurl = url.replace(/(^\w+:|^)\/\//, '');
+  dns.lookup(workurl, async function(err) {
+    if (err) {
+      res.send({ error: "invalid url" });
+    } else {
+      let count = await shorturl.find().then((docs) => {
+        let count = docs.length;
+        return count;
+      });
+      let pageid = count + 1;
+      let newUrl = new shorturl({
+        urlid: pageid,
+        url: url,
+      })
+      newUrl.save();
 
-    const urlsystem = (s) => {
-      try {
-        console.log(s)
-        new URL(s);
-        return true;
-      } catch (err) {
-        console.log(err)
-        return false;
-      }
-    };
-    let check = urlsystem(url);
-    console.log(check)
-    if(check === false) return res.send({ url: 'Invalid URL'});
-    if(check === true) {
-// Creating the buffer object with utf8 encoding
-let bufferObj = Buffer.from(url, "utf8");
-
-// Encoding into base64
-let base64String = bufferObj.toString("base64");
-
-// Printing the base64 encoded string
-console.log("The encoded base64 string is:", base64String);
-
-let newUrl = new shorturl({
-  urlid: base64String,
-  url: url,
+      res.send({
+        original_url: url,
+        short_url: pageid
+      })
+    }
+  })
 })
-newUrl.save();
-
-res.send({ 
-  original_url: url,
-  shorturl: base64String
-})
-}
-})
-
-// Your first API endpoint
-app.get('/api/:id', function(req, res) {
-  res.json({ greeting: 'hello API' });
-});
 
 app.listen(port, function() {
   console.log(`Listening on port ${port}`);
