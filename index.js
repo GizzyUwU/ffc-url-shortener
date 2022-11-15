@@ -9,7 +9,7 @@ function isNum(str) {
   return /\d/.test(str)
 }
 
-mongoose.connect('mongodb+srv://freecodecamp:freecodecamp@cluster0.hwsa1vu.mongodb.net/urlshortener', {useUnifiedTopology: true, useFindAndModify: true});
+mongoose.connect('Provide Your Own', {useUnifiedTopology: true, useFindAndModify: true});
 
 // Basic Configuration
 const port = 3000;
@@ -36,10 +36,9 @@ app.get('/api/shorturl/:id', async (req, res) => {
   const { id } = req.params;
   let num = isNum(id);
   if(num === false) return res.send({ short_url: "Must be a number."});
-console.log(id)
   await shorturl.findOne({ urlid: id }, async (err, urlFound) => {
     if (err) {
-      console.log('findOne() error');
+      console.log(err);
     }
     console.log(urlFound)
     if (!urlFound) {
@@ -47,23 +46,24 @@ console.log(id)
         error: 'invaild url'
       });
     } else {
-      res.redirect(301, "https://" + urlFound.url);
+      if(urlFound.urlpath) {
+        console.log(urlFound)
+      res.redirect(302, urlFound.protocal + "://" + urlFound.url + "/" + urlFound.urlpath);
+      } else {
+              res.redirect(302, urlFound.protocal + "://" + urlFound.url);
+      }
     }
 })
 })
 
 app.post('/api/shorturl', async (req, res) => {
   try {
-  let url = req.body.url
-  let find = await shorturl.find({ url: url });
-  if (!url) return res.send({ url: 'No Url Provided' });
-  let protocal = url.replace(/(^\w+:|^)\/\//, '')
-  let workurl = protocal.split('/')[0];
-    console.log(workurl.replace(':', ''))
-    console.log(workurl)
-    console.log(protocal)
-    console.log(url)
-  dns.lookup(workurl, async function(err) {
+  let link = req.body.url
+  if (!link) return res.send({ url: 'No Url Provided' });
+    const urlObject = new URL(link);
+    const hostName = urlObject.hostname;
+    const protocol = urlObject.protocol;
+    dns.lookup(hostName, async function(err) {
     if (err) {
       res.send({ error: "invalid url" });
     } else {
@@ -74,14 +74,14 @@ app.post('/api/shorturl', async (req, res) => {
       let pageid = count + 1;
       let newUrl = new shorturl({
         urlid: pageid,
-        url: workurl,
-        urlpath: protocal,
-        protocal: workurl.replace(':', '')
+        url: hostName,
+        urlpath: link.replace(/^[a-zA-Z]{3,5}\:\/{2}[a-zA-Z0-9_.:-]+\//, ''),
+        protocal: protocol.replace(':', '')
       })
       newUrl.save();
 
-      res.send({
-        original_url: url,
+      res.json({
+        original_url: link,
         short_url: pageid
       })
     }
